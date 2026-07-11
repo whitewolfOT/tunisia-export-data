@@ -5,6 +5,36 @@ on:
     - cron: '0 6 * * *'   # every day at 6am UTC
   workflow_dispatch:
 
+name: Update FAO Prices (Daily)
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:                # <-- ADD THESE THREE LINES
+      contents: write           #     to allow push
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pandas requests
+      - name: Run update script
+        run: python process_fao.py
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add fao_latest.json history/
+          git commit -m "Daily FAO update $(date +'%Y-%m-%d')" || exit 0
+          git push
+          
 jobs:
   update:
     runs-on: ubuntu-latest
