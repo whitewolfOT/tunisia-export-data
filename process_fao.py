@@ -1,15 +1,8 @@
-# process_fao.py - Fixed version with fallback mirror
-import pandas as pd
 import requests
 import json
-from io import StringIO
+import time
 
-# Try FAO directly first, then fallback to a mirror
-urls = [
-    "https://fenixservices.fao.org/faostat/static/bulkdownloads/QA.csv",
-    "https://raw.githubusercontent.com/owid/owid-datasets/master/datasets/Agricultural%20producer%20prices%20-%20FAO/Agricultural%20producer%20prices%20-%20FAO.csv"
-]
-
+# Product & country codes
 PRODUCT_FAO = {
     "Tomate": "2615", "Pomme de terre": "116", "Oignon": "403", "Ail": "406",
     "Concombre / Faqous": "397", "Aubergine": "399", "Carotte": "426",
@@ -24,47 +17,42 @@ TARGET_COUNTRIES = {
     "160": "Nigeria", "38": "Morocco"
 }
 
-df = None
-for url in urls:
-    try:
-        print(f"Trying: {url[:50]}...")
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
-        if resp.status_code == 200:
-            df = pd.read_csv(StringIO(resp.text), encoding="latin-1")
-            print("✅ Download successful")
-            break
-    except Exception as e:
-        print(f"Failed: {e}")
+BASE_URL = "https://fenixservices.fao.org/faostat/api/v2/en/QA/QC"
+results = []
 
-if df is None:
-    raise Exception("All URLs failed")
+for area_code, area_name in TARGET_COUNTRIES.items():
+    for product_name, item_code in PRODUCT_FAO.items():
+        params = {
+            "area": area_code,
+            "item": item_code,
+            "element": "5532",       # Producer Price (USD/tonne)
+            "year": "2023,2024",
+            "show_codes": "false",
+            "show_unit": "false",
+            "output_type": "json"
+        }
+        try:
+            resp = requests.get(BASE_URL, params=params, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                if data:
+                    latest = max(data, key=lambda x: int(x["Year"]))
+                    price_kg = round(latest["Value"] / 1000, 4)
+                    results.append({
+                        "Region": "Africa/ME/Asia",
+                        "Country": area_name,
+                        "Product (TN)": product_name,
+                        "Price (Local)": price_kg,
+                        "Currency": "USD",
+                        "Unit": "kg",
+                        "Date": str(latest["Year"]),
+                        "Source": "FAOSTAT (live)"
+                    })
+            time.sleep(0.3)   # be gentle with the API
+        except Exception as e:
+            print(f"Error {area_name}/{product_name}: {e}")
 
-# Process based on column structure
-if 'Element Code' in df.columns:
-    # Original FAO format
-    df = df[df["Element Code"] == 5532]
-    df = df[df["Area Code"].astype(str).isin(TARGET_COUNTRIES.keys())]
-    df = df[df["Item Code"].astype(str).isin(PRODUCT_FAO.values())]
-    code_to_french = {v: k for k, v in PRODUCT_FAO.items()}
-    df["Product (TN)"] = df["Item Code"].astype(str).map(code_to_french)
-    latest_idx = df.groupby(["Area", "Product (TN)"])["Year"].idxmax()
-    df = df.loc[latest_idx]
-    output = []
-    for _, row in df.iterrows():
-        output.append({
-            "Region": "Africa/ME/Asia",
-            "Country": row["Area"],
-            "Product (TN)": row["Product (TN)"],
-            "Price (Local)": round(float(row["Value"]) / 1000, 4),
-            "Currency": "USD", "Unit": "kg",
-            "Date": str(int(row["Year"])),
-            "Source": "FAOSTAT (live)"
-        })
-else:
-    # OWID mirror format
-    print("Processing OWID format...")
-    # [Add OWID processing here if needed]
+with open("fao_latest.json", "w", encoding="utf-8") as f:
+    json.dump(results, f, ensure_ascii=False, indent=2)
 
-with open("fao_latest.json", "w") as f:
-    json.dump(output, f, indent=2)
-print(f"✅ Created fao_latest.json with {len(output)} records")
+print(f"✅ Created fao_latest.json with {len(results)} records.")
