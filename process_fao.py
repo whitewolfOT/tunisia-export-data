@@ -48,7 +48,7 @@ for area_code, area_name in TARGET_COUNTRIES.items():
                         "Date": str(latest["Year"]),
                         "Source": "FAOSTAT (live)"
                     })
-            time.sleep(0.3)   # be gentle with the API
+            time.sleep(0.3)
         except Exception as e:
             print(f"Error {area_name}/{product_name}: {e}")
 
