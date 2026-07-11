@@ -2,7 +2,6 @@ import requests
 import json
 import time
 
-# Product & country codes
 PRODUCT_FAO = {
     "Tomate": "2615", "Pomme de terre": "116", "Oignon": "403", "Ail": "406",
     "Concombre / Faqous": "397", "Aubergine": "399", "Carotte": "426",
@@ -25,7 +24,7 @@ for area_code, area_name in TARGET_COUNTRIES.items():
         params = {
             "area": area_code,
             "item": item_code,
-            "element": "5532",       # Producer Price (USD/tonne)
+            "element": "5532",
             "year": "2023,2024",
             "show_codes": "false",
             "show_unit": "false",
